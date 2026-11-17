@@ -33,13 +33,21 @@ function Login() {
     setBusy(true);
     const email = `${name}@birreal.app`;
     if (mode === "up") {
-      const { data: free } = await supabase.rpc("username_available", { name });
-      if (!free) { setBusy(false); return setErr("Ese usuario ya existe"); }
+      const { data: free, error: checkError } =
+      await supabase.rpc("username_available", { name });
+    if (checkError) {
+      setBusy(false);
+      return setErr("Error comprobando usuario: " + checkError.message);
+    }
+    if (free !== true) {
+      setBusy(false);
+      return setErr("Ese usuario ya existe");
+    }
       const { error } = await supabase.auth.signUp({ email, password: pass, options: { data: { username: name } } });
       if (error) setErr(error.message);
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-      if (error) setErr("Usuario o contraseña incorrectos");
+      if (error) setErr(error.message);
     }
     setBusy(false);
   }
