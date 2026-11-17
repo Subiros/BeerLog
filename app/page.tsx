@@ -1,5 +1,6 @@
 "use client";
 
+import { Analytics } from "@vercel/analytics/next"
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 
@@ -8,6 +9,7 @@ import App from "@/components/App";
 import Login from "@/components/Login";
 
 export default function Home() {
+  <Analytics />
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
 
