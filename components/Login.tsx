@@ -7,6 +7,7 @@ export default function Login() {
     const [mode, setMode] = useState<"in" | "up">("in");
     const [user, setUser] = useState("");
     const [pass, setPass] = useState("");
+    const [confirmPass, setConfirmPass] = useState("");
     const [err, setErr] = useState("");
     const [busy, setBusy] = useState(false);
 
@@ -20,7 +21,8 @@ export default function Login() {
 
         if (pass.length < 6)
             return setErr("La contraseña necesita al menos 6 caracteres");
-
+        if (mode === "up" && pass !== confirmPass)
+        return setErr("Las contraseñas no coinciden");
         setBusy(true);
 
         const email = `${name}@birreal.app`;
@@ -85,6 +87,16 @@ export default function Login() {
                 value={pass}
                 onChange={e => setPass(e.target.value)}
             />
+            {mode === "up" && (
+                <>
+                    <label>Confirmar contraseña</label>
+                    <input
+                    type="password"
+                    value={confirmPass}
+                    onChange={e => setConfirmPass(e.target.value)}
+                    />
+                </>
+            )}
 
             <button onClick={go} disabled={busy}>
                 {mode === "in" ? "Entrar" : "Registrarme"}
