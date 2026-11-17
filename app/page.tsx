@@ -54,7 +54,7 @@ function App({ session }: { session: Session }) {
     const paths = list.map(b => b.photo_path).filter(Boolean) as string[];
     const signed = paths.length ? (await supabase.storage.from("beer-photos").createSignedUrls(paths, 3600)).data ?? [] : [];
     const map = new Map(signed.map(s => [s.path, s.signedUrl]));
-    setBeers(list.map(b => ({ ...b, url: b.photo_path ? map.get(b.photo_path) : undefined })));
+    setBeers(list.map(b => ({ ...b, url: b.photo_path ? (map.get(b.photo_path) ?? undefined) : undefined })));
   }, [session]);
   useEffect(() => { load(); }, [load]);
 
