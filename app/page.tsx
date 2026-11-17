@@ -22,26 +22,79 @@ export default function Home() {
 }
 
 function Login() {
-  const [email, setEmail] = useState(""); const [sent, setSent] = useState(false); const [err, setErr] = useState("");
+  const [mode, setMode] = useState<"in" | "up">("in");
+  const [user, setUser] = useState(""); const [pass, setPass] = useState("");
+  const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  const name = user.trim().toLowerCase();
   async function go() {
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin } });
-    if (error) setErr(error.message); else setSent(true);
+    setErr("");
+    if (!/^[a-z0-9_]{3,20}$/.test(name)) return setErr("Usuario: 3 a 20 letras, números o _");
+    if (pass.length < 6) return setErr("La contraseña necesita al menos 6 caracteres");
+    setBusy(true);
+    const email = `${name}@birreal.app`;
+    if (mode === "up") {
+      const { data: free } = await supabase.rpc("username_available", { name });
+      if (!free) { setBusy(false); return setErr("Ese usuario ya existe"); }
+      const { error } = await supabase.auth.signUp({ email, password: pass, options: { data: { username: name } } });
+      if (error) setErr(error.message);
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (error) setErr("Usuario o contraseña incorrectos");
+    }
+    setBusy(false);
   }
   return (
     <div className="card"><h1>🍺 Birreal</h1>
-      {sent ? <p>Te hemos enviado un enlace a {email}. Ábrelo para entrar.</p> : <>
-        <p className="mu">Entra con tu email, sin contraseña. Solo para mayores de edad.</p>
-        <input type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} />
-        <button onClick={go} disabled={!email}>Entrar</button>
-        {err && <p className="mu">{err}</p>}</>}
+      <p className="mu">{mode === "in" ? "Inicia sesión" : "Crea tu cuenta"}. Solo para mayores de edad.</p>
+      <label>Usuario</label><input value={user} onChange={e => setUser(e.target.value)} autoCapitalize="none" />
+      <label>Contraseña</label><input type="password" value={pass} onChange={e => setPass(e.target.value)} />
+      <button onClick={go} disabled={busy}>{mode === "in" ? "Entrar" : "Registrarme"}</button>
+      {err && <p className="mu">{err}</p>}
+      <p><button className="s" onClick={() => { setMode(mode === "in" ? "up" : "in"); setErr(""); }}>
+        {mode === "in" ? "No tengo cuenta" : "Ya tengo cuenta"}</button></p>
     </div>
   );
+}
+
+type FeedItem = Beer & { username: string; url?: string };
+
+function ago(d: string) {
+  const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
+  if (m < 1) return "ahora";
+  if (m < 60) return `hace ${m} min`;
+  if (m < 1440) return `hace ${Math.floor(m / 60)} h`;
+  return new Date(d).toLocaleDateString("es-ES");
+}
+
+function Feed() {
+  const [items, setItems] = useState<FeedItem[] | null>(null);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.rpc("feed", { lim: 50 });
+      const list = (data ?? []) as (Beer & { username: string })[];
+      const paths = list.map(b => b.photo_path).filter(Boolean) as string[];
+      const signed = paths.length ? (await supabase.storage.from("beer-photos").createSignedUrls(paths, 3600)).data ?? [] : [];
+      const map = new Map(signed.map(s => [s.path, s.signedUrl]));
+      setItems(list.map(b => ({ ...b, url: b.photo_path ? (map.get(b.photo_path) ?? undefined) : undefined })));
+    })();
+  }, []);
+  if (!items) return <p className="mu">Cargando...</p>;
+  return (<>
+    <h1>Inicio</h1>
+    {items.length === 0 && <div className="card mu">Aún no hay cervezas. Registra la primera o añade amigos en la pestaña Amigos.</div>}
+    {items.map(b => <div className="card" key={b.id}>
+      <div className="row" style={{ justifyContent: "space-between" }}><b>{b.username}</b><span className="mu" style={{ textAlign: "right" }}>{ago(b.created_at)}</span></div>
+      {b.url && <img src={b.url} alt="" style={{ width: "100%", borderRadius: 10, margin: "8px 0" }} />}
+      <div>🍺 <b>{b.brand}</b> <span className="mu">{b.type} · {b.ml} ml · {b.abv}%</span></div>
+      <div className="mu">{b.place ?? "—"}{b.with_whom ? ` · con ${b.with_whom}` : ""} · {Number(b.price).toFixed(2)} €</div>
+    </div>)}
+  </>);
 }
 
 type Rank = { username: string; beers: number; alcohol_ml: number; spent: number };
 
 function App({ session }: { session: Session }) {
-  const [tab, setTab] = useState<"add" | "me" | "rank">("add");
+  const [tab, setTab] = useState<"feed" | "add" | "me" | "rank">("feed");
   const [beers, setBeers] = useState<BeerUrl[]>([]);
   const [me, setMe] = useState<Me>(null);
 
@@ -59,12 +112,13 @@ function App({ session }: { session: Session }) {
   useEffect(() => { load(); }, [load]);
 
   return (<>
-    {tab === "add" && <Add uid={session.user.id} done={() => { load(); setTab("me"); }} />}
+    {tab === "feed" && <Feed />}
+    {tab === "add" && <Add uid={session.user.id} done={() => { load(); setTab("feed"); }} />}
     {tab === "me" && <Profile beers={beers} me={me} reload={load} />}
     {tab === "rank" && <Ranking me={me} />}
-    <nav>{(["add", "me", "rank"] as const).map(t =>
+    <nav>{(["feed", "add", "me", "rank"] as const).map(t =>
       <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
-        {t === "add" ? "🍺 Registrar" : t === "me" ? "👤 Perfil" : "🏆 Amigos"}</button>)}</nav>
+        {{ feed: "🏠 Inicio", add: "➕ Registrar", me: "👤 Perfil", rank: "🏆 Amigos" }[t]}</button>)}</nav>
   </>);
 }
 
